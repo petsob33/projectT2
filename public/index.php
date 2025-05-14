@@ -3,12 +3,12 @@
 define('INCLUDE_CHECK', true);
 
 // Include config file
-require_once "includes/db.php";
-require_once "includes/auth.php";
+require_once "../includes/db.php";
+require_once "../includes/auth.php";
 
 // Check if the user is logged in, if not then redirect to login page
 if (!is_logged_in()) {
-    header("location: login.php");
+    header("location: ./login.php");
     exit;
 }
 
@@ -69,12 +69,12 @@ if (!is_logged_in()) {
     <div class="sidebar-menu fixed inset-y-0 left-0 w-64 bg-white shadow-lg z-50 p-4">
         <h2 class="text-xl font-bold mb-4">Menu</h2>
         <ul>
-            <li class="mb-2"><a href="index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
-            <li class="mb-2"><a href="memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
-            <li class="mb-2"><a href="pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
-            <li class="mb-2"><a href="admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
+            <li class="mb-2"><a href="./index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
+            <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
+            <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+            <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
-                <li class="mb-2"><a href="logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
+                <li class="mb-2"><a href="./logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
             <?php endif; ?>
         </ul>
     </div>
@@ -122,7 +122,7 @@ if (!is_logged_in()) {
         async function fetchRandomPhoto() {
             try {
                 // Assuming a backend endpoint exists to get a random photo URL
-                const response = await fetch('get_random_photo.php'); // TODO: Create this endpoint
+                const response = await fetch('../app/get_random_photo.php'); // TODO: Create this endpoint
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -135,7 +135,7 @@ if (!is_logged_in()) {
                 // Wait for animation to complete (adjust time as needed)
                 setTimeout(() => {
                     // Update photo source
-                    photoElement.src = 'uploads/' + photoData.filename;
+                    photoElement.src = '../uploads/' + photoData.filename;
                     // Apply fade-in animation
                     photoElement.style.opacity = 1;
                 }, 300); // Match this duration with CSS transition duration

@@ -3,12 +3,12 @@
 define('INCLUDE_CHECK', true);
 
 // Include config file
-require_once "includes/db.php";
-require_once "includes/auth.php";
+require_once "../includes/db.php";
+require_once "../includes/auth.php";
 
 // Check if the user is logged in, if not then redirect to login page
 if (!is_logged_in()) {
-    header("location: login.php");
+    header("location: ../public/login.php");
     exit;
 }
 
@@ -132,12 +132,12 @@ unset($pdo);
     <div class="sidebar-menu fixed inset-y-0 left-0 w-64 bg-white shadow-lg z-50 p-4">
         <h2 class="text-xl font-bold mb-4">Menu</h2>
         <ul>
-            <li class="mb-2"><a href="index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
-            <li class="mb-2"><a href="memories.php" class="text-gray-700 hover:text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></a></li>
-            <li class="mb-2"><a href="pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
-            <li class="mb-2"><a href="admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
+            <li class="mb-2"><a href="../public/index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
+            <li class="mb-2"><a href="./memories.php" class="text-gray-700 hover:text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></a></li>
+            <li class="mb-2"><a href="./pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+            <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
-                <li class="mb-2"><a href="logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
+                <li class="mb-2"><a href="../public/logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
             <?php endif; ?>
         </ul>
     </div>
@@ -220,7 +220,7 @@ unset($pdo);
 
         // JavaScript for handling pair requests
         async function handleRequest(requestId, action) {
-            const response = await fetch('handle_pair_request.php', {
+            const response = await fetch('./handle_pair_request.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -242,7 +242,7 @@ unset($pdo);
             const messageDiv = document.getElementById('send-request-message');
             messageDiv.textContent = ''; // Clear previous messages
 
-            const response = await fetch('send_pair_request.php', {
+            const response = await fetch('./send_pair_request.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',

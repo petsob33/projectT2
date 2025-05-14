@@ -8,7 +8,7 @@ require_once "../includes/auth.php";
 
 // Check if the user is logged in, if not then redirect to login page
 if (!is_logged_in()) {
-    header("location: ../login.php");
+    header("location: ../public/login.php");
     exit;
 }
 
@@ -44,7 +44,7 @@ if (isset($_GET["id"]) && !empty(trim($_GET["id"]))) {
                     // Attempt to execute the prepared statement
                     if ($stmt_delete->execute()) {
                         // Redirect to dashboard
-                        header("location: dashboard.php");
+                        header("location: ./dashboard.php");
                         exit();
                     } else {
                         echo "Oops! Something went wrong with the database deletion. Please try again later.";
@@ -64,7 +64,7 @@ if (isset($_GET["id"]) && !empty(trim($_GET["id"]))) {
     unset($pdo);
 } else {
     // If ID is not provided, redirect to dashboard
-    header("location: dashboard.php");
+    header("location: ./dashboard.php");
     exit();
 }
 ?>

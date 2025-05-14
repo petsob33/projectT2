@@ -3,7 +3,7 @@
 define('INCLUDE_CHECK', true);
 
 // Include database connection file
-require_once "includes/db.php";
+require_once "../includes/db.php";
 
 $sql = "ALTER TABLE photos ADD COLUMN date DATE NULL AFTER description";
 

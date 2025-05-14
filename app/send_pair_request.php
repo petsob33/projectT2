@@ -3,8 +3,8 @@
 define('INCLUDE_CHECK', true);
 
 // Include config file
-require_once "includes/db.php";
-require_once "includes/auth.php";
+require_once "../includes/db.php";
+require_once "../includes/auth.php";
 
 // Set header to return JSON
 header('Content-Type: application/json');

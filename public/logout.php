@@ -3,7 +3,7 @@
 define('INCLUDE_CHECK', true);
 
 // Include auth file
-require_once "includes/auth.php";
+require_once "../includes/auth.php";
 
 // Call the logout function
 logout();

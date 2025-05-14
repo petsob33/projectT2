@@ -3,8 +3,8 @@
 define('INCLUDE_CHECK', true);
 
 // Include config file
-require_once "includes/db.php";
-require_once "includes/auth.php";
+require_once "../includes/db.php";
+require_once "../includes/auth.php";
 
 // Define variables and initialize with empty values
 $username = $password = $confirm_password = "";
@@ -80,7 +80,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Attempt to execute the prepared statement
             if ($stmt->execute()) {
                 // Redirect to login page
-                header("location: login.php");
+                header("location: ./login.php");
                 exit(); // Added exit after header
             } else {
                 echo "Oops! Něco se pokazilo. Zkuste to prosím znovu později.";
@@ -168,7 +168,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="submit" class="bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300 cursor-pointer" value="Zaregistrovat se">
             </div>
         </form>
-        <p class="text-gray-600 text-sm mt-6">Již máte účet? <a href="login.php" class="text-pastel-purple hover:underline">Přihlaste se zde</a>.</p>
+        <p class="text-gray-600 text-sm mt-6">Již máte účet? <a href="./login.php" class="text-pastel-purple hover:underline">Přihlaste se zde</a>.</p>
     </div>
 
 </body>

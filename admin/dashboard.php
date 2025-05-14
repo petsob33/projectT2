@@ -8,7 +8,7 @@ require_once "../includes/auth.php";
 
 // Check if the user is logged in, if not then redirect to login page
 if (!is_logged_in()) {
-    header("location: ../login.php");
+    header("location: ../public/login.php");
     exit;
 }
 
@@ -76,12 +76,12 @@ unset($stmt);
     <div class="sidebar-menu fixed inset-y-0 left-0 w-64 bg-white shadow-lg z-50 p-4">
         <h2 class="text-xl font-bold mb-4">Menu</h2>
         <ul>
-            <li class="mb-2"><a href="../index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
-            <li class="mb-2"><a href="../memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
-            <li class="mb-2"><a href="../pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
-            <li class="mb-2"><a href="dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
+            <li class="mb-2"><a href="../public/index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
+            <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
+            <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+            <li class="mb-2"><a href="./dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
-                <li class="mb-2"><a href="../logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
+                <li class="mb-2"><a href="../public/logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
             <?php endif; ?>
         </ul>
     </div>
@@ -95,7 +95,7 @@ unset($stmt);
             <p class="text-gray-700 mb-6">Vítejte, <?php echo htmlspecialchars($_SESSION["username"]); ?>.</p>
 
             <div class="mb-6">
-                <a href="upload.php" class="inline-block bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300">Nahrát novou fotku</a>
+                <a href="./upload.php" class="inline-block bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300">Nahrát novou fotku</a>
             </div>
 
             <h2 class="text-3xl font-bold text-pastel-purple mb-4">Spravovat fotky</h2>
@@ -121,7 +121,7 @@ unset($stmt);
                                     <td class="py-3 px-6 text-left"><?php echo htmlspecialchars($photo['description']); ?></td>
                                     <td class="py-3 px-6 text-left"><?php echo htmlspecialchars($photo['date']); ?></td>
                                     <td class="py-3 px-6 text-center">
-                                        <a href="delete.php?id=<?php echo $photo['id']; ?>" class="text-red-600 hover:text-red-900" onclick="return confirm('Opravdu chcete smazat tuto fotku?');">Smazat</a>
+                                        <a href="./delete.php?id=<?php echo $photo['id']; ?>" class="text-red-600 hover:text-red-900" onclick="return confirm('Opravdu chcete smazat tuto fotku?');">Smazat</a>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

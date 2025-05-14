@@ -3,12 +3,12 @@
 define('INCLUDE_CHECK', true);
 
 // Include config file
-require_once "includes/db.php";
-require_once "includes/auth.php";
+require_once "../includes/db.php";
+require_once "../includes/auth.php";
 
 // Check if the user is already logged in, if yes then redirect to dashboard
 if (is_logged_in()) {
-    header("location: admin/dashboard.php");
+    header("location: ../admin/dashboard.php");
     exit;
 }
 
@@ -37,7 +37,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (empty($username_err) && empty($password_err)) {
         if (attempt_login($pdo, $username, $password)) {
             // Redirect user to admin dashboard page
-            header("location: admin/dashboard.php");
+            header("location: ../admin/dashboard.php");
             exit(); // Added exit after header
         } else {
             // Password is not valid, display a generic error message
@@ -117,7 +117,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="submit" class="bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300 cursor-pointer" value="Přihlásit se">
             </div>
         </form>
-        <p class="text-gray-600 text-sm mt-6">Nemáte účet? <a href="register.php" class="text-pastel-purple hover:underline">Zaregistrujte se</a>.</p>
+        <p class="text-gray-600 text-sm mt-6">Nemáte účet? <a href="./register.php" class="text-pastel-purple hover:underline">Zaregistrujte se</a>.</p>
     </div>
 
 </body>

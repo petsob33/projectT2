@@ -135,6 +135,7 @@ unset($pdo);
             <li class="mb-2"><a href="../public/index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
             <li class="mb-2"><a href="./memories.php" class="text-gray-700 hover:text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></a></li>
             <li class="mb-2"><a href="./pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+             <li class="mb-2"><a href="../public/relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
                 <li class="mb-2"><a href="../public/logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>

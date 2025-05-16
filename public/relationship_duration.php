@@ -13,42 +13,38 @@ if (!is_logged_in()) {
 }
 
 $user_id = $_SESSION['id'];
-$start_date = null;
+$relationship_start_date = null;
+$partner_username = "Partner"; // Default value
+$relationship_start_date = null;
 $partner_username = "Partner"; // Default value
 
-// Check if the user is part of a pair and get the start date and partner's ID
-$sql_check_pair = "SELECT user1_id, user2_id, start_date FROM pairs WHERE user1_id = :user_id OR user2_id = :user_id LIMIT 1";
-if ($stmt_check_pair = $pdo->prepare($sql_check_pair)) {
-    $stmt_check_pair->bindParam(":user_id", $user_id, PDO::PARAM_INT);
-    if ($stmt_check_pair->execute()) {
-        $pair = $stmt_check_pair->fetch(PDO::FETCH_ASSOC);
-        if ($pair) {
-            $start_date = $pair['start_date'];
-            $partner_id = ($pair['user1_id'] == $user_id) ? $pair['user2_id'] : $pair['user1_id'];
+// Fetch the pair's start date and partner's username
+$sql_get_pair_info = "SELECT p.start_date, u.username AS partner_username
+                      FROM pairs p
+                      JOIN users u ON (u.id = p.user1_id OR u.id = p.user2_id) AND u.id != :user_id
+                      WHERE p.user1_id = :user_id OR p.user2_id = :user_id
+                      LIMIT 1";
 
-            // Fetch partner's username
-            $sql_get_partner_name = "SELECT username FROM users WHERE id = :partner_id LIMIT 1";
-            if ($stmt_get_partner_name = $pdo->prepare($sql_get_partner_name)) {
-                $stmt_get_partner_name->bindParam(":partner_id", $partner_id, PDO::PARAM_INT);
-                if ($stmt_get_partner_name->execute()) {
-                    $partner = $stmt_get_partner_name->fetch(PDO::FETCH_ASSOC);
-                    if ($partner) {
-                        $partner_username = htmlspecialchars($partner['username']);
-                    }
-                }
-                unset($stmt_get_partner_name);
-            }
+if ($stmt_get_pair_info = $pdo->prepare($sql_get_pair_info)) {
+    $stmt_get_pair_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+    if ($stmt_get_pair_info->execute()) {
+        $pair_info = $stmt_get_pair_info->fetch(PDO::FETCH_ASSOC);
+        if ($pair_info) {
+            $relationship_start_date = $pair_info['start_date'];
+            $partner_username = htmlspecialchars($pair_info['partner_username']);
         }
+    } else {
+        error_log("Error fetching pair info for relationship duration: " . $stmt_get_pair_info->errorInfo()[2]);
     }
-    unset($stmt_check_pair);
 }
+unset($stmt_get_pair_info);
 
 // Calculate duration if start date is available
 $duration_message = "Datum začátku vztahu není nastaveno.";
-if ($start_date) {
-    $start_datetime = new DateTime($start_date);
-    $current_datetime = new DateTime();
-    $interval = $start_datetime->diff($current_datetime);
+if ($relationship_start_date) {
+    $start_date_obj = new DateTime($relationship_start_date);
+    $current_date_obj = new DateTime();
+    $interval = $start_date_obj->diff($current_date_obj);
 
     $years = $interval->y;
     $months = $interval->m;
@@ -56,17 +52,17 @@ if ($start_date) {
 
     $duration_parts = [];
     if ($years > 0) {
-        $duration_parts[] = $years . " " . ($years === 1 ? "rok" : ($years >= 2 && $years <= 4 ? "roky" : "let"));
+        $duration_parts[] = $years . " let";
     }
     if ($months > 0) {
-        $duration_parts[] = $months . " " . ($months === 1 ? "měsíc" : ($months >= 2 && $months <= 4 ? "měsíce" : "měsíců"));
+        $duration_parts[] = $months . " měsíců";
     }
     if ($days > 0) {
-        $duration_parts[] = $days . " " . ($days === 1 ? "den" : "dní");
+        $duration_parts[] = $days . " dní";
     }
 
     if (!empty($duration_parts)) {
-        $duration_message = "Jste spolu: " . implode(", ", $duration_parts);
+        $duration_message = "Jste spolu " . implode(", ", $duration_parts) . ".";
     } else {
         $duration_message = "Jste spolu méně než jeden den.";
     }
@@ -74,6 +70,7 @@ if ($start_date) {
 
 // Close connection
 unset($pdo);
+
 ?>
 
 <!DOCTYPE html>
@@ -81,7 +78,7 @@ unset($pdo);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Délka vztahu - <?php echo $_SESSION['username'] . " a " . $partner_username; ?></title>
+    <title>Délka vztahu - Naše fotky</title>
     <!-- Include Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style type="text/tailwindcss">
@@ -115,7 +112,7 @@ unset($pdo);
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col text-base">
+<body class="bg-pastel-blue min-h-screen flex flex-col text-base">
     <header class="bg-pastel-pink p-4 flex justify-between items-center shadow-md">
         <div class="text-3xl font-bold text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></div>
         <div class="hamburger-menu-icon text-pastel-purple text-3xl cursor-pointer">&#9776;</div>
@@ -126,9 +123,9 @@ unset($pdo);
         <h2 class="text-xl font-bold mb-4">Menu</h2>
         <ul>
             <li class="mb-2"><a href="./index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
-            <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></a></li>
-             <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
-            <li class="mb-2"><a href="./relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
+            <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
+            <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+             <li class="mb-2"><a href="./relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
                 <li class="mb-2"><a href="./logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
@@ -139,10 +136,11 @@ unset($pdo);
     <!-- Overlay for closing sidebar -->
     <div class="overlay fixed inset-0 bg-black opacity-0 pointer-events-none transition-opacity duration-300 z-40"></div>
 
-    <main class="flex-grow flex flex-col items-center p-4">
+    <main class="flex-grow flex flex-col items-center justify-center p-4">
         <div class="relationship-duration-content bg-white p-6 rounded-xl shadow-lg w-full max-w-md text-center">
             <h1 class="text-4xl font-bold text-pastel-purple mb-6">Délka vztahu</h1>
-            <p class="text-gray-700 text-xl"><?php echo htmlspecialchars($duration_message); ?></p>
+            <p class="text-gray-700 text-xl mb-4"><?php echo $duration_message; ?></p>
+
         </div>
     </main>
 
@@ -164,6 +162,5 @@ unset($pdo);
             overlay.classList.add('pointer-events-none');
         });
     </script>
-
 </body>
 </html>

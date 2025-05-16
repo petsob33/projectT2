@@ -12,18 +12,113 @@ if (!is_logged_in()) {
     exit;
 }
 
-// Fetch photos from the database
-$photos = [];
-$sql = "SELECT id, filename, description, date FROM photos ORDER BY date DESC"; // Reverted to 'date' based on database error
-if ($stmt = $pdo->prepare($sql)) {
-    if ($stmt->execute()) {
-        $photos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Fetch the pair's start date
+$user_id = $_SESSION['id'];
+$pair_id = null;
+$relationship_start_date = null;
+$error_message = "";
+
+// Check if the user is part of a pair and get pair_id and start_date
+$sql_get_pair_info = "SELECT id, start_date FROM pairs WHERE user1_id = :user_id OR user2_id = :user_id LIMIT 1";
+if ($stmt_get_pair_info = $pdo->prepare($sql_get_pair_info)) {
+    $stmt_get_pair_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+    if ($stmt_get_pair_info->execute()) {
+        $pair = $stmt_get_pair_info->fetch(PDO::FETCH_ASSOC);
+        if ($pair) {
+            $pair_id = $pair['id'];
+            $relationship_start_date = $pair['start_date'];
+        }
     } else {
-        // Handle error - log or display a message
-        echo "Oops! Something went wrong. Please try again later.";
+        error_log("Error fetching pair info for admin dashboard: " . $stmt_get_pair_info->errorInfo()[2]);
     }
 }
-unset($stmt);
+unset($stmt_get_pair_info);
+
+
+// Handle form submission for setting start date
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['start_date'])) {
+    $submitted_date = trim($_POST['start_date']);
+
+    // Validate date format (basic YYYY-MM-DD)
+    if (preg_match("/^\d{4}-\d{2}-\d{2}$/", $submitted_date)) {
+        if ($pair_id !== null) {
+            // Update the start_date for the pair
+            $sql_update_start_date = "UPDATE pairs SET start_date = :start_date WHERE id = :pair_id";
+            if ($stmt_update_start_date = $pdo->prepare($sql_update_start_date)) {
+                $stmt_update_start_date->bindParam(":start_date", $submitted_date, PDO::PARAM_STR);
+                $stmt_update_start_date->bindParam(":pair_id", $pair_id, PDO::PARAM_INT);
+                if ($stmt_update_start_date->execute()) {
+                    // Redirect to prevent form resubmission and show updated duration
+                    header("location: ./dashboard.php");
+                    exit();
+                } else {
+                    $error_message = "Chyba při ukládání data začátku vztahu.";
+                    error_log("Error updating start_date in admin dashboard: " . $stmt_update_start_date->errorInfo()[2]);
+                }
+                unset($stmt_update_start_date);
+            } else {
+                 $error_message = "Interní chyba serveru při přípravě aktualizace data.";
+                 error_log("Error preparing update start_date statement in admin dashboard: " . $pdo->errorInfo()[2]);
+            }
+        } else {
+            $error_message = "Nejste součástí žádného páru. Nelze nastavit datum začátku vztahu.";
+        }
+    } else {
+        $error_message = "Neplatný formát data. Použijte prosím formát RRRR-MM-DD.";
+    }
+}
+
+
+// Fetch events and their associated photos ordered by event date
+$events = [];
+
+// Fetch events and their associated photos if paired
+if ($pair_id !== null) {
+    $sql = "SELECT
+                e.id AS event_id,
+                e.name AS event_name,
+                e.date AS event_date,
+                p.id AS photo_id,
+                p.filename,
+                p.description
+            FROM events e
+            JOIN photos p ON e.id = p.event_id
+            WHERE e.pair_id = :pair_id
+            ORDER BY e.date DESC, p.id ASC"; // Order by event date descending, then photo ID ascending
+
+    $params = [':pair_id' => $pair_id];
+
+    if ($stmt = $pdo->prepare($sql)) {
+        if ($stmt->execute($params)) {
+            $raw_data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Group photos by event
+            foreach ($raw_data as $row) {
+                $event_id = $row['event_id'];
+                if (!isset($events[$event_id])) {
+                    $events[$event_id] = [
+                        'id' => $event_id,
+                        'name' => htmlspecialchars($row['event_name']),
+                        'date' => htmlspecialchars($row['event_date']),
+                        'photos' => []
+                    ];
+                }
+                $events[$event_id]['photos'][] = [
+                    'id' => $row['photo_id'],
+                    'filename' => htmlspecialchars($row['filename']),
+                    'description' => htmlspecialchars($row['description'])
+                ];
+            }
+        } else {
+            // Handle error - log or display a message
+            echo "Oops! Something went wrong. Please try again later.";
+        }
+    }
+    unset($stmt);
+}
+
+// Close connection (if it was opened by db.php, though it's better to manage connection scope)
+// unset($pdo); // Keep connection open if needed by auth.php or other includes
 
 ?>
 
@@ -79,6 +174,7 @@ unset($stmt);
             <li class="mb-2"><a href="../public/index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
             <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
             <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+             <li class="mb-2"><a href="../public/relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="./dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
                 <li class="mb-2"><a href="../public/logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
@@ -94,39 +190,55 @@ unset($stmt);
             <h1 class="text-4xl font-bold text-pastel-purple mb-6">Admin Dashboard</h1>
             <p class="text-gray-700 mb-6">Vítejte, <?php echo htmlspecialchars($_SESSION["username"]); ?>.</p>
 
-            <div class="mb-6">
-                <a href="./upload.php" class="inline-block bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300">Nahrát novou fotku</a>
+            <!-- Relationship Start Date Form -->
+            <div class="mb-8 pb-8 border-b border-gray-200">
+                <h2 class="text-3xl font-bold text-pastel-purple mb-4">Datum začátku vztahu</h2>
+                 <?php if (!empty($error_message)): ?>
+                     <div class="text-red-500 text-sm mb-4"><?php echo $error_message; ?></div>
+                 <?php endif; ?>
+                <form action="./dashboard.php" method="post" class="space-y-4">
+                    <div>
+                        <label for="start_date" class="block text-gray-700 font-bold mb-2">Datum začátku</label>
+                        <input type="date" id="start_date" name="start_date" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" value="<?php echo htmlspecialchars($relationship_start_date); ?>" required>
+                    </div>
+                    <button type="submit" class="bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300 cursor-pointer">Uložit datum</button>
+                </form>
             </div>
 
-            <h2 class="text-3xl font-bold text-pastel-purple mb-4">Spravovat fotky</h2>
-            <div class="photo-list overflow-x-auto">
-                <?php if (empty($photos)): ?>
-                    <p class="text-gray-600">Zatím zde nejsou žádné fotky.</p>
-                <?php else: ?>
+
+            <div class="mb-6">
+                <a href="./upload.php" class="inline-block bg-pastel-pink text-pastel-purple font-bold py-2 px-4 rounded-xl shadow hover:opacity-90 transition duration-300">Nahrát novou událost s fotkami</a>
+            </div>
+
+            <h2 class="text-3xl font-bold text-pastel-purple mb-4">Spravovat události</h2>
+            <div class="event-list overflow-x-auto">
+                <?php if (!empty($events)): ?>
                     <table class="min-w-full bg-white rounded-xl overflow-hidden">
                         <thead>
                             <tr class="bg-pastel-pink text-pastel-purple uppercase text-base leading-normal">
-                                <th class="py-3 px-6 text-left">Náhled</th>
-                                <th class="py-3 px-6 text-left">Popisek</th>
+                                <th class="py-3 px-6 text-left">Název události</th>
                                 <th class="py-3 px-6 text-left">Datum</th>
+                                <th class="py-3 px-6 text-left">Počet fotek</th>
                                 <th class="py-3 px-6 text-center">Akce</th>
                             </tr>
                         </thead>
                         <tbody class="text-gray-600 text-base font-light">
-                            <?php foreach ($photos as $photo): ?>
+                            <?php foreach ($events as $event): ?>
                                 <tr class="border-b border-gray-200 hover:bg-gray-100">
-                                    <td class="py-3 px-6 text-left whitespace-nowrap">
-                                        <img src="../uploads/<?php echo htmlspecialchars($photo['filename']); ?>" alt="<?php echo htmlspecialchars($photo['description']); ?>" class="w-16 h-16 object-cover rounded">
-                                    </td>
-                                    <td class="py-3 px-6 text-left"><?php echo htmlspecialchars($photo['description']); ?></td>
-                                    <td class="py-3 px-6 text-left"><?php echo htmlspecialchars($photo['date']); ?></td>
+                                    <td class="py-3 px-6 text-left whitespace-nowrap"><?php echo $event['name']; ?></td>
+                                    <td class="py-3 px-6 text-left"><?php echo $event['date']; ?></td>
+                                    <td class="py-3 px-6 text-left"><?php echo count($event['photos']); ?></td>
                                     <td class="py-3 px-6 text-center">
-                                        <a href="./delete.php?id=<?php echo $photo['id']; ?>" class="text-red-600 hover:text-red-900" onclick="return confirm('Opravdu chcete smazat tuto fotku?');">Smazat</a>
+                                        <a href="../app/memories.php#event-<?php echo $event['id']; ?>" class="text-blue-600 hover:text-blue-900 mr-4">Zobrazit</a>
+                                        <!-- Add delete event functionality later if needed -->
+                                        <a href="./delete_event.php?id=<?php echo $event['id']; ?>" class="text-red-600 hover:text-red-900" onclick="return confirm('Opravdu chcete smazat tuto událost a všechny její fotky?');">Smazat</a>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                <?php else: ?>
+                    <p class="text-gray-600">Zatím zde nejsou žádné události s fotkami.</p>
                 <?php endif; ?>
             </div>
         </div>
@@ -152,9 +264,9 @@ unset($stmt);
     </script>
 
    <script>
-       // Log photo data to console for debugging
-       const photosData = <?php echo json_encode($photos); ?>;
-       console.log('Admin Dashboard photo data:', photosData);
+       // Log event data to console for debugging
+       const eventsData = <?php echo json_encode($events); ?>;
+       console.log('Admin Dashboard event data:', eventsData);
    </script>
 </body>
 </html>

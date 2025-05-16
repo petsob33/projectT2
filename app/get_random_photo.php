@@ -47,12 +47,20 @@ error_log("DEBUG: get_random_photo - Partner ID before query: " . ($partner_id !
 
 // Fetch a random photo filename from the database based on pairing status
 $photoData = null;
-$sql = "SELECT filename FROM photos WHERE user_id = :user_id";
+// Select filename and event name
+$sql = "SELECT p.filename, e.name AS event_name
+        FROM photos p
+        LEFT JOIN events e ON p.event_id = e.id
+        WHERE p.user_id = :user_id";
 $params = [':user_id' => $user_id];
 
 if ($pair_id !== null) {
-    // Include photos from the pair and the partner
-    $sql = "SELECT filename FROM photos WHERE user_id = :user_id OR user_id = :partner_id OR (user_id IS NULL AND pair_id = :pair_id)";
+    // Include photos from the pair and the partner, linked to events belonging to the pair
+    $sql = "SELECT p.filename, e.name AS event_name
+            FROM photos p
+            LEFT JOIN events e ON p.event_id = e.id
+            WHERE (p.user_id = :user_id OR p.user_id = :partner_id OR (p.user_id IS NULL AND p.pair_id = :pair_id))
+            AND (e.pair_id = :pair_id OR p.event_id IS NULL)"; // Ensure event belongs to pair or photo is not linked to an event
     $params[':partner_id'] = $partner_id;
     $params[':pair_id'] = $pair_id;
 }

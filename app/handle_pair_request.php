@@ -76,49 +76,70 @@ if ($stmt_update_request = $pdo->prepare($sql_update_request)) {
     if ($stmt_update_request->execute()) {
 
         if ($action === 'accept') {
-            // If accepted, create a new pair entry
-            $user1_id = min($request['requester_id'], $request['recipient_id']); // Ensure consistent order
-            $user2_id = max($request['requester_id'], $request['recipient_id']);
+           // If accepted, create a new pair entry
+           $user1_id = min($request['requester_id'], $request['recipient_id']); // Ensure consistent order
+           $user2_id = max($request['requester_id'], $request['recipient_id']);
 
-            $sql_create_pair = "INSERT INTO pairs (user1_id, user2_id) VALUES (:user1_id, :user2_id)";
-            if ($stmt_create_pair = $pdo->prepare($sql_create_pair)) {
-                $stmt_create_pair->bindParam(":user1_id", $user1_id, PDO::PARAM_INT);
-                $stmt_create_pair->bindParam(":user2_id", $user2_id, PDO::PARAM_INT);
-                if ($stmt_create_pair->execute()) {
-                    http_response_code(200); // OK
-                    echo json_encode(['message' => 'Žádost o párování byla přijata. Nyní jste pár!']);
-                } else {
-                    // If pair creation fails, revert request status and log error
-                    $sql_revert_request = "UPDATE pair_requests SET status = 'pending' WHERE id = :id";
-                    $stmt_revert_request = $pdo->prepare($sql_revert_request);
-                    $stmt_revert_request->bindParam(":id", $request_id, PDO::PARAM_INT);
-                    $stmt_revert_request->execute(); // Attempt to revert, ignore errors here
+           // Get start_date from POST, validate and use current date if not provided or invalid
+           $start_date = null;
+           if (isset($_POST['start_date']) && !empty(trim($_POST['start_date']))) {
+               $start_date_str = trim($_POST['start_date']);
+               // Basic date validation (YYYY-MM-DD format)
+               if (preg_match("/^\d{4}-\d{2}-\d{2}$/", $start_date_str)) {
+                   $start_date = $start_date_str;
+               } else {
+                   error_log("Invalid start_date format received: " . $start_date_str);
+               }
+           }
 
-                    http_response_code(500); // Internal Server Error
-                    error_log("Error creating pair: " . $stmt_create_pair->errorInfo()[2]);
-                    echo json_encode(['error' => 'Nepodařilo se vytvořit pár. Zkuste to prosím znovu.']);
-                }
-                unset($stmt_create_pair);
-            } else {
-                 http_response_code(500); // Internal Server Error
-                 error_log("Error preparing create pair statement: " . $pdo->errorInfo()[2]);
-                 echo json_encode(['error' => 'Interní chyba serveru.']);
-            }
-        } else {
-            // If rejected
-            http_response_code(200); // OK
-            echo json_encode(['message' => 'Žádost o párování byla odmítnuta.']);
-        }
+           // Use current date if start_date is not provided or invalid
+           if ($start_date === null) {
+                $start_date = date('Y-m-d');
+                error_log("Using current date for start_date: " . $start_date);
+           }
 
-    } else {
-        http_response_code(500); // Internal Server Error
-        error_log("Error updating pair request status: " . $stmt_update_request->errorInfo()[2]);
-        echo json_encode(['error' => 'Nepodařilo se zpracovat žádost o párování. Zkuste to prosím znovu.']);
-    }
+
+           $sql_create_pair = "INSERT INTO pairs (user1_id, user2_id, start_date) VALUES (:user1_id, :user2_id, :start_date)";
+           if ($stmt_create_pair = $pdo->prepare($sql_create_pair)) {
+               $stmt_create_pair->bindParam(":user1_id", $user1_id, PDO::PARAM_INT);
+               $stmt_create_pair->bindParam(":user2_id", $user2_id, PDO::PARAM_INT);
+               $stmt_create_pair->bindParam(":start_date", $start_date, PDO::PARAM_STR); // Bind start_date
+
+               if ($stmt_create_pair->execute()) {
+                   http_response_code(200); // OK
+                   echo json_encode(['message' => 'Žádost o párování byla přijata. Nyní jste pár!']);
+               } else {
+                   // If pair creation fails, revert request status and log error
+                   $sql_revert_request = "UPDATE pair_requests SET status = 'pending' WHERE id = :id";
+                   $stmt_revert_request = $pdo->prepare($sql_revert_request);
+                   $stmt_revert_request->bindParam(":id", $request_id, PDO::PARAM_INT);
+                   $stmt_revert_request->execute(); // Attempt to revert, ignore errors here
+
+                   http_response_code(500); // Internal Server Error
+                   error_log("Error creating pair: " . $stmt_create_pair->errorInfo()[2]);
+                   echo json_encode(['error' => 'Nepodařilo se vytvořit pár. Zkuste to prosím znovu.']);
+               }
+               unset($stmt_create_pair);
+           } else {
+                http_response_code(500); // Internal Server Error
+                error_log("Error preparing create pair statement: " . $pdo->errorInfo()[2]);
+                echo json_encode(['error' => 'Interní chyba serveru.']);
+           }
+       } else {
+           // If rejected
+           http_response_code(200); // OK
+           echo json_encode(['message' => 'Žádost o párování byla odmítnuta.']);
+       }
+
+   } else {
+       http_response_code(500); // Internal Server Error
+       error_log("Error updating pair request status: " . $stmt_update_request->errorInfo()[2]);
+       echo json_encode(['error' => 'Nepodařilo se zpracovat žádost o párování. Zkuste to prosím znovu.']);
+   }
 } else {
-    http_response_code(500); // Internal Server Error
-    error_log("Error preparing update pair request statement: " . $pdo->errorInfo()[2]);
-    echo json_encode(['error' => 'Interní chyba serveru.']);
+   http_response_code(500); // Internal Server Error
+   error_log("Error preparing update pair request statement: " . $pdo->errorInfo()[2]);
+   echo json_encode(['error' => 'Interní chyba serveru.']);
 }
 unset($stmt_update_request);
 

@@ -72,6 +72,7 @@ if (!is_logged_in()) {
             <li class="mb-2"><a href="./index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
             <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
             <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+            <li class="mb-2"><a href="./relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
                 <li class="mb-2"><a href="./logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
@@ -85,11 +86,12 @@ if (!is_logged_in()) {
     <main class="flex-grow flex flex-col items-center justify-center p-4">
         <div class="photo-display bg-white p-4 rounded-xl shadow-lg max-w-xl w-full text-center">
             <img id="photo" src="" alt="Aktuální fotka" class="rounded-xl w-full h-auto mb-4">
-            <!-- Optional: Add elements for description and date if needed -->
-            <!-- <div class="photo-info">
-                <h2 id="photo-description" class="text-lg font-semibold"></h2>
-                <p id="photo-date" class="text-sm text-gray-600"></p>
-            </div> -->
+            <div class="photo-info">
+                <h2 id="event-name" class="text-lg font-semibold text-gray-800 mb-2"></h2>
+                <!-- Optional: Add elements for description and date if needed -->
+                <!-- <p id="photo-description" class="text-gray-700"></p>
+                <p id="photo-date" class="text-sm text-gray-600"></p> -->
+            </div>
         </div>
         <button id="next-photo-btn" class="mt-6 bg-pastel-pink text-pastel-purple font-bold py-3 px-6 rounded-xl shadow-lg hover:opacity-90 transition duration-300">
             Zobrazit další fotku
@@ -116,32 +118,41 @@ if (!is_logged_in()) {
 
         // JavaScript for fetching and displaying photos with animation
         const photoElement = document.getElementById('photo');
+        const eventNameElement = document.getElementById('event-name'); // Get the new element
         const nextPhotoButton = document.getElementById('next-photo-btn');
 
         // Function to fetch a random photo
         async function fetchRandomPhoto() {
             try {
-                // Assuming a backend endpoint exists to get a random photo URL
-                const response = await fetch('../app/get_random_photo.php'); // TODO: Create this endpoint
+                const response = await fetch('../app/get_random_photo.php');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                const photoData = await response.json(); // Assuming the endpoint returns JSON like { filename: '...' }
+                const photoData = await response.json();
                 console.log('Random photo data:', photoData);
 
                 // Apply fade-out animation
                 photoElement.style.opacity = 0;
+                eventNameElement.style.opacity = 0; // Fade out event name too
 
                 // Wait for animation to complete (adjust time as needed)
                 setTimeout(() => {
                     // Update photo source
-                    photoElement.src = '../uploads/' + photoData.filename;
+                    photoElement.src = photoData.filename ? '../uploads/' + photoData.filename : ''; // Handle case with no photo
+                    // Update event name
+                    eventNameElement.textContent = photoData.event_name ? 'Událost: ' + photoData.event_name : ''; // Display event name or empty
+
                     // Apply fade-in animation
                     photoElement.style.opacity = 1;
+                    eventNameElement.style.opacity = 1; // Fade in event name
                 }, 300); // Match this duration with CSS transition duration
             } catch (error) {
                 console.error('Error fetching random photo:', error);
                 // Optionally display an error message to the user
+                photoElement.src = ''; // Clear photo on error
+                eventNameElement.textContent = 'Chyba při načítání fotky.'; // Display error message
+                photoElement.style.opacity = 1; // Ensure elements are visible to show error
+                eventNameElement.style.opacity = 1;
             }
         }
 
@@ -154,7 +165,7 @@ if (!is_logged_in()) {
     </script>
     <style>
         /* Add CSS for fade transition */
-        #photo {
+        #photo, #event-name {
             transition: opacity 0.3s ease-in-out;
         }
     </style>

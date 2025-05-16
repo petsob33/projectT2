@@ -16,6 +16,106 @@ if (!is_logged_in()) {
 $description = $date = "";
 $description_err = $photo_err = $date_err = "";
 
+// Function to compress image while preserving orientation and aspect ratio
+function compressImage($source, $destination, $quality, $target_size = 500000) {
+    // Get image information including EXIF data
+    $info = getimagesize($source);
+    $exif = @exif_read_data($source);
+    
+    if ($info['mime'] == 'image/jpeg' || $info['mime'] == 'image/jpg') {
+        $image = imagecreatefromjpeg($source);
+    } elseif ($info['mime'] == 'image/png') {
+        $image = imagecreatefrompng($source);
+    } elseif ($info['mime'] == 'image/gif') {
+        $image = imagecreatefromgif($source);
+    } else {
+        return false;
+    }
+    
+    // Initial quality
+    $curr_quality = $quality;
+    $max_attempts = 5;
+    $attempts = 0;
+    
+    // Get original dimensions
+    $width = imagesx($image);
+    $height = imagesy($image);
+    
+    // Fix orientation based on EXIF data
+    if (!empty($exif['Orientation'])) {
+        switch ($exif['Orientation']) {
+            case 3:
+                $image = imagerotate($image, 180, 0);
+                break;
+            case 6:
+                $image = imagerotate($image, -90, 0);
+                // Swap width and height
+                $tmp = $width;
+                $width = $height;
+                $height = $tmp;
+                break;
+            case 8:
+                $image = imagerotate($image, 90, 0);
+                // Swap width and height
+                $tmp = $width;
+                $width = $height;
+                $height = $tmp;
+                break;
+        }
+    }
+    
+    // Try just quality reduction first (without resizing)
+    imagejpeg($image, $destination, $curr_quality);
+    
+    // Check if target size is reached
+    $current_size = filesize($destination);
+    
+    // If file is still too large, gradually reduce quality and resize if necessary
+    while ($current_size > $target_size && $attempts < $max_attempts) {
+        $attempts++;
+        
+        // First try just reducing quality more
+        if ($attempts <= 2) {
+            $curr_quality = max($curr_quality - 10, 50); // Reduce quality more aggressively
+            imagejpeg($image, $destination, $curr_quality);
+        } 
+        // If that doesn't work, then resize while preserving aspect ratio
+        else {
+            // Calculate new dimensions (reduce by 15% each remaining attempt)
+            $scale = 1 - (($attempts - 2) * 0.15);
+            $new_width = max(round($width * $scale), 800); // Don't go below 800px width
+            $new_height = round($height * ($new_width / $width));
+            
+            // Create new image with correct aspect ratio
+            $new_image = imagecreatetruecolor($new_width, $new_height);
+            
+            // Preserve transparency for PNG images
+            if ($info['mime'] == 'image/png') {
+                imagealphablending($new_image, false);
+                imagesavealpha($new_image, true);
+                $transparent = imagecolorallocatealpha($new_image, 255, 255, 255, 127);
+                imagefilledrectangle($new_image, 0, 0, $new_width, $new_height, $transparent);
+            }
+            
+            // Copy and resize the image
+            imagecopyresampled($new_image, $image, 0, 0, 0, 0, $new_width, $new_height, $width, $height);
+            
+            // Set quality to a good value
+            $curr_quality = 40;
+            
+            // Save compressed image
+            imagejpeg($new_image, $destination, $curr_quality);
+            imagedestroy($new_image);
+        }
+        
+        // Check new size
+        $current_size = filesize($destination);
+    }
+    
+    imagedestroy($image);
+    return true;
+}
+
 // Processing form data when form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
@@ -48,10 +148,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $photo_err = "Chyba: Prosím, vyberte platný formát souboru (JPG, JPEG, GIF, PNG).";
         }
 
-        // Verify file size - 5MB maximum
-        $maxsize = 5 * 1024 * 1024;
+        // Verify file size - 10MB maximum (initial upload size limit)
+        $maxsize = 10 * 1024 * 1024;
         if ($file_size > $maxsize) {
-            $photo_err = "Chyba: Velikost souboru je větší než povolený limit (5MB).";
+            $photo_err = "Chyba: Velikost souboru je větší než povolený limit (10MB).";
         }
 
         // Verify MIME type of the file
@@ -62,12 +162,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Check if there were no upload errors and no description or date errors
         if (empty($photo_err) && empty($description_err) && empty($date_err)) {
             // Generate a unique filename
-            $new_filename = uniqid() . "." . $ext;
+            $new_filename = uniqid() . ".jpg"; // Always save as JPG after compression
             $upload_path = "../uploads/" . $new_filename;
+            $temp_file = $_FILES["photo"]["tmp_name"];
 
-            // Attempt to move the uploaded file to the uploads directory
-            if (move_uploaded_file($_FILES["photo"]["tmp_name"], $upload_path)) {
-                // File uploaded successfully, now determine user or pair
+            // Compress the image before saving
+            if (compressImage($temp_file, $upload_path, 85, 500000)) { // Target size: 500KB (500,000 bytes)
+                // File uploaded and compressed successfully, now determine user or pair
                 $user_id = $_SESSION['id'];
                 $pair_id = null;
 
@@ -123,7 +224,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
                 unset($stmt);
             } else {
-                $photo_err = "Chyba: Při nahrávání souboru došlo k problému. Zkuste to prosím znovu.";
+                $photo_err = "Chyba: Při kompresi souboru došlo k problému. Zkuste to prosím znovu.";
             }
         }
     } else {
@@ -206,6 +307,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="admin-upload-content bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
             <h1 class="text-4xl font-bold text-pastel-purple mb-6">Nahrát novou fotku</h1>
             <p class="text-gray-700 mb-6">Vyplňte prosím tento formulář pro nahrání nové fotky.</p>
+            <p class="text-gray-500 mb-6 text-sm">Nahrané fotky budou automaticky zkomprimovány na přibližně 500 KB se zachováním poměru stran i orientace.</p>
 
             <?php
             // Display error messages if any

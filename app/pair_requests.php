@@ -88,7 +88,7 @@ unset($pdo);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Žádosti o párování - <?php echo $_SESSION['username'] . " a " . $partner_username; ?></title>
+    <title>Žádosti o párování</title>
     <!-- Include Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style type="text/tailwindcss">
@@ -124,7 +124,7 @@ unset($pdo);
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col text-base">
     <header class="bg-pastel-pink p-4 flex justify-between items-center shadow-md">
-        <div class="text-3xl font-bold text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></div>
+        <div class="text-3xl font-bold text-pastel-purple">Žádosti o párování</div>
         <div class="hamburger-menu-icon text-pastel-purple text-3xl cursor-pointer">&#9776;</div>
     </header>
 
@@ -133,9 +133,10 @@ unset($pdo);
         <h2 class="text-xl font-bold mb-4">Menu</h2>
         <ul>
             <li class="mb-2"><a href="../public/index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
-            <li class="mb-2"><a href="./memories.php" class="text-gray-700 hover:text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></a></li>
+            <li class="mb-2"><a href="./memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
             <li class="mb-2"><a href="./pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
-             <li class="mb-2"><a href="../public/relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
+            <li class="mb-2"><a href="./group_invitations.php" class="text-gray-700 hover:text-pastel-purple">Skupiny a pozvánky</a></li>
+            <li class="mb-2"><a href="../public/relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
                 <li class="mb-2"><a href="../public/logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>

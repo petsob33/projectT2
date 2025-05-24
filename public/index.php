@@ -1,4 +1,5 @@
 <?php
+session_start();
 // Define a constant to prevent direct access to include files
 define('INCLUDE_CHECK', true);
 
@@ -12,11 +13,51 @@ if (!is_logged_in()) {
     exit;
 }
 
-// No need to fetch all photos here, JavaScript will fetch one randomly
-// No need for session photo index or next photo button logic here
+$user_id = $_SESSION['id'];
 
-// Close connection (if it was opened by db.php, though it's better to manage connection scope)
-// unset($pdo); // Keep connection open if needed by auth.php or other includes
+// Check if the user is part of a group
+$group_id = null;
+$group_name = null;
+$sql_check_group = "SELECT g.id, g.name FROM groups g
+                    JOIN group_members gm ON g.id = gm.group_id
+                    WHERE gm.user_id = :user_id
+                    LIMIT 1";
+if ($stmt_check_group = $pdo->prepare($sql_check_group)) {
+    $stmt_check_group->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+    if ($stmt_check_group->execute()) {
+        $group = $stmt_check_group->fetch(PDO::FETCH_ASSOC);
+        if ($group) {
+            $group_id = $group['id'];
+            $group_name = htmlspecialchars($group['name']);
+        }
+    }
+    unset($stmt_check_group);
+}
+
+// If not in a group, check if in a pair (for backward compatibility)
+$pair_id = null;
+$partner_username = "Partner"; // Default value
+if ($group_id === null) {
+    $sql_check_pair = "SELECT p.id, u.username AS partner_username
+                       FROM pairs p
+                       JOIN users u ON (u.id = p.user1_id OR u.id = p.user2_id) AND u.id != :user_id
+                       WHERE p.user1_id = :user_id OR p.user2_id = :user_id
+                       LIMIT 1";
+    if ($stmt_check_pair = $pdo->prepare($sql_check_pair)) {
+        $stmt_check_pair->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+        if ($stmt_check_pair->execute()) {
+            $pair = $stmt_check_pair->fetch(PDO::FETCH_ASSOC);
+            if ($pair) {
+                $pair_id = $pair['id'];
+                $partner_username = htmlspecialchars($pair['partner_username']);
+            }
+        }
+        unset($stmt_check_pair);
+    }
+}
+
+// Close connection
+unset($pdo);
 
 ?>
 
@@ -25,7 +66,7 @@ if (!is_logged_in()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Naše fotky - <?php echo $_SESSION['username'] . " a " . $partner_username; ?></title>
+    <title>Naše fotky - <?php echo $group_id !== null ? $group_name : $_SESSION['username'] . " a " . $partner_username; ?></title>
     <!-- Include Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style type="text/tailwindcss">
@@ -61,7 +102,15 @@ if (!is_logged_in()) {
 </head>
 <body class="bg-pastel-blue min-h-screen flex flex-col text-base">
     <header class="bg-pastel-pink p-4 flex justify-between items-center shadow-md">
-        <div class="text-3xl font-bold text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></div>
+        <div class="text-3xl font-bold text-pastel-purple">
+            <?php
+            if ($group_id !== null) {
+                echo htmlspecialchars($group_name);
+            } else {
+                echo $_SESSION['username'] . " a " . $partner_username;
+            }
+            ?>
+        </div>
         <div class="hamburger-menu-icon text-pastel-purple text-3xl cursor-pointer">&#9776;</div>
     </header>
 
@@ -72,6 +121,7 @@ if (!is_logged_in()) {
             <li class="mb-2"><a href="./index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
             <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
             <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
+            <li class="mb-2"><a href="../app/group_invitations.php" class="text-gray-700 hover:text-pastel-purple">Skupiny a pozvánky</a></li>
             <li class="mb-2"><a href="./relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="../admin/dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
@@ -171,3 +221,95 @@ if (!is_logged_in()) {
     </style>
 </body>
 </html>
+<script>
+    // Check for saved mode preference
+    const currentMode = '<?php echo $_SESSION["mode"] ?? "light"; ?>';
+    document.body.classList.toggle('dark', currentMode === 'dark');
+    
+    // Add mode toggle to the sidebar
+    const sidebarMenu = document.querySelector('.sidebar-menu ul');
+    if (sidebarMenu) {
+        const modeToggleItem = document.createElement('li');
+        modeToggleItem.className = 'mb-2 mt-4';
+        modeToggleItem.innerHTML = `
+            <div class="flex items-center">
+                <span class="text-gray-700 mr-2">Tmavý režim</span>
+                <label class="switch">
+                    <input type="checkbox" id="mode-toggle" ${currentMode === 'dark' ? 'checked' : ''}>
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        `;
+        sidebarMenu.appendChild(modeToggleItem);
+        
+        // Now add the event listener after the element exists
+        const modeToggle = document.getElementById('mode-toggle');
+        if (modeToggle) {
+            modeToggle.addEventListener('change', () => {
+                const newMode = modeToggle.checked ? 'dark' : 'light';
+                fetch('./set_mode.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ mode: newMode })
+                }).then(() => {
+                    document.body.classList.toggle('dark', newMode === 'dark');
+                });
+            });
+        }
+    }
+</script>
+<style>
+    body {
+        transition: background-color 0.3s, color 0.3s;
+    }
+    body.dark {
+        background-color: #1a1a1a; /* Dark background */
+        color: #f0f0f0; /* Light text */
+    }
+    /* Style for the toggle switch */
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+    }
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+    }
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 2px;
+        bottom: 2px;
+        background-color: white;
+        transition: .4s;
+    }
+    input:checked + .slider {
+        background-color: #DC143C;
+    }
+    input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+    .slider.round {
+        border-radius: 20px;
+    }
+    .slider.round:before {
+        border-radius: 50%;
+    }
+</style>

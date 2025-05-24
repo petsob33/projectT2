@@ -1,4 +1,5 @@
 <?php
+session_start();
 // Define a constant to prevent direct access to include files
 define('INCLUDE_CHECK', true);
 
@@ -14,33 +15,59 @@ if (!is_logged_in()) {
 
 $user_id = $_SESSION['id'];
 $relationship_start_date = null;
-$partner_username = "Partner"; // Default value
-$relationship_start_date = null;
-$partner_username = "Partner"; // Default value
+$relationship_name = ""; // Will store either group name or partner username
+$is_group = false;
 
-// Fetch the pair's start date and partner's username
-$sql_get_pair_info = "SELECT p.start_date, u.username AS partner_username
-                      FROM pairs p
-                      JOIN users u ON (u.id = p.user1_id OR u.id = p.user2_id) AND u.id != :user_id
-                      WHERE p.user1_id = :user_id OR p.user2_id = :user_id
-                      LIMIT 1";
+// Check if the user is part of a group
+$sql_get_group_info = "SELECT g.name, g.start_date
+                       FROM groups g
+                       JOIN group_members gm ON g.id = gm.group_id
+                       WHERE gm.user_id = :user_id
+                       LIMIT 1";
 
-if ($stmt_get_pair_info = $pdo->prepare($sql_get_pair_info)) {
-    $stmt_get_pair_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
-    if ($stmt_get_pair_info->execute()) {
-        $pair_info = $stmt_get_pair_info->fetch(PDO::FETCH_ASSOC);
-        if ($pair_info) {
-            $relationship_start_date = $pair_info['start_date'];
-            $partner_username = htmlspecialchars($pair_info['partner_username']);
+if ($stmt_get_group_info = $pdo->prepare($sql_get_group_info)) {
+    $stmt_get_group_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+    if ($stmt_get_group_info->execute()) {
+        $group_info = $stmt_get_group_info->fetch(PDO::FETCH_ASSOC);
+        if ($group_info) {
+            $relationship_start_date = $group_info['start_date'];
+            $relationship_name = htmlspecialchars($group_info['name']);
+            $is_group = true;
         }
     } else {
-        error_log("Error fetching pair info for relationship duration: " . $stmt_get_pair_info->errorInfo()[2]);
+        error_log("Error fetching group info for relationship duration: " . $stmt_get_group_info->errorInfo()[2]);
     }
 }
-unset($stmt_get_pair_info);
+unset($stmt_get_group_info);
+
+// If not in a group, check if in a pair (for backward compatibility)
+if (!$is_group) {
+    $partner_username = "Partner"; // Default value
+    
+    // Fetch the pair's start date and partner's username
+    $sql_get_pair_info = "SELECT p.start_date, u.username AS partner_username
+                           FROM pairs p
+                           JOIN users u ON (u.id = p.user1_id OR u.id = p.user2_id) AND u.id != :user_id
+                           WHERE p.user1_id = :user_id OR p.user2_id = :user_id
+                           LIMIT 1";
+
+    if ($stmt_get_pair_info = $pdo->prepare($sql_get_pair_info)) {
+        $stmt_get_pair_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+        if ($stmt_get_pair_info->execute()) {
+            $pair_info = $stmt_get_pair_info->fetch(PDO::FETCH_ASSOC);
+            if ($pair_info) {
+                $relationship_start_date = $pair_info['start_date'];
+                $relationship_name = htmlspecialchars($pair_info['partner_username']);
+            }
+        } else {
+            error_log("Error fetching pair info for relationship duration: " . $stmt_get_pair_info->errorInfo()[2]);
+        }
+    }
+    unset($stmt_get_pair_info);
+}
 
 // Calculate duration if start date is available
-$duration_message = "Datum začátku vztahu není nastaveno.";
+$duration_message = "Datum začátku " . ($is_group ? "skupiny" : "vztahu") . " není nastaveno.";
 if ($relationship_start_date) {
     $start_date_obj = new DateTime($relationship_start_date);
     $current_date_obj = new DateTime();
@@ -62,9 +89,17 @@ if ($relationship_start_date) {
     }
 
     if (!empty($duration_parts)) {
-        $duration_message = "Jste spolu " . implode(", ", $duration_parts) . ".";
+        if ($is_group) {
+            $duration_message = "Skupina existuje " . implode(", ", $duration_parts) . ".";
+        } else {
+            $duration_message = "Jste spolu " . implode(", ", $duration_parts) . ".";
+        }
     } else {
-        $duration_message = "Jste spolu méně než jeden den.";
+        if ($is_group) {
+            $duration_message = "Skupina existuje méně než jeden den.";
+        } else {
+            $duration_message = "Jste spolu méně než jeden den.";
+        }
     }
 }
 
@@ -78,7 +113,7 @@ unset($pdo);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Délka vztahu - Naše fotky</title>
+    <title><?php echo $is_group ? "Délka existence skupiny" : "Délka vztahu"; ?> - Naše fotky</title>
     <!-- Include Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style type="text/tailwindcss">
@@ -114,7 +149,15 @@ unset($pdo);
 </head>
 <body class="bg-pastel-blue min-h-screen flex flex-col text-base">
     <header class="bg-pastel-pink p-4 flex justify-between items-center shadow-md">
-        <div class="text-3xl font-bold text-pastel-purple"><?php echo $_SESSION['username'] . " a " . $partner_username; ?></div>
+        <div class="text-3xl font-bold text-pastel-purple">
+            <?php
+            if ($is_group) {
+                echo htmlspecialchars($relationship_name);
+            } else {
+                echo $_SESSION['username'] . " a " . $relationship_name;
+            }
+            ?>
+        </div>
         <div class="hamburger-menu-icon text-pastel-purple text-3xl cursor-pointer">&#9776;</div>
     </header>
 
@@ -138,7 +181,9 @@ unset($pdo);
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
         <div class="relationship-duration-content bg-white p-6 rounded-xl shadow-lg w-full max-w-md text-center">
-            <h1 class="text-4xl font-bold text-pastel-purple mb-6">Délka vztahu</h1>
+            <h1 class="text-4xl font-bold text-pastel-purple mb-6">
+                <?php echo $is_group ? "Délka existence skupiny" : "Délka vztahu"; ?>
+            </h1>
             <p class="text-gray-700 text-xl mb-4"><?php echo $duration_message; ?></p>
 
         </div>
@@ -164,3 +209,32 @@ unset($pdo);
     </script>
 </body>
 </html>
+<script>
+    // Check for saved mode preference
+    const modeToggle = document.getElementById('mode-toggle');
+    const currentMode = '<?php echo $_SESSION["mode"] ?? "light"; ?>';
+    document.body.classList.toggle('dark', currentMode === 'dark');
+    modeToggle.checked = currentMode === 'dark';
+
+    modeToggle.addEventListener('change', () => {
+        const newMode = modeToggle.checked ? 'dark' : 'light';
+        fetch('./set_mode.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ mode: newMode })
+        }).then(() => {
+            document.body.classList.toggle('dark', newMode === 'dark');
+        });
+    });
+</script>
+<style>
+    body {
+        transition: background-color 0.3s, color 0.3s;
+    }
+    body.dark {
+        background-color: #1a1a1a; /* Dark background */
+        color: #f0f0f0; /* Light text */
+    }
+</style>

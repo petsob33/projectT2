@@ -19,33 +19,72 @@ if (!is_logged_in()) {
 $user_id = $_SESSION['id'];
 $debug_info = ['user_id' => $user_id];
 
-// Check if the user is part of a pair
-$pair_id = null;
-$partner_id = null;
-$sql_check_pair = "SELECT user1_id, user2_id, id FROM pairs WHERE user1_id = :user_id OR user2_id = :user_id LIMIT 1";
-if ($stmt_check_pair = $pdo->prepare($sql_check_pair)) {
-    $stmt_check_pair->bindParam(":user_id", $user_id, PDO::PARAM_INT);
-    if ($stmt_check_pair->execute()) {
-        $pair = $stmt_check_pair->fetch(PDO::FETCH_ASSOC);
-        if ($pair) {
-            $pair_id = $pair['id'];
-            // Determine partner's ID
-            $partner_id = ($pair['user1_id'] == $user_id) ? $pair['user2_id'] : $pair['user1_id'];
+// Check if the user is part of a group
+$group_id = null;
+$group_members = [];
+$sql_check_group = "SELECT g.id, g.name FROM groups g
+                    JOIN group_members gm ON g.id = gm.group_id
+                    WHERE gm.user_id = :user_id
+                    LIMIT 1";
+if ($stmt_check_group = $pdo->prepare($sql_check_group)) {
+    $stmt_check_group->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+    if ($stmt_check_group->execute()) {
+        $group = $stmt_check_group->fetch(PDO::FETCH_ASSOC);
+        if ($group) {
+            $group_id = $group['id'];
+            $group_name = $group['name'];
+            
+            // Get all members of the group
+            $sql_get_members = "SELECT user_id FROM group_members WHERE group_id = :group_id";
+            if ($stmt_get_members = $pdo->prepare($sql_get_members)) {
+                $stmt_get_members->bindParam(":group_id", $group_id, PDO::PARAM_INT);
+                if ($stmt_get_members->execute()) {
+                    while ($member = $stmt_get_members->fetch(PDO::FETCH_ASSOC)) {
+                        $group_members[] = $member['user_id'];
+                    }
+                }
+                unset($stmt_get_members);
+            }
         }
     } else {
-        $debug_info['pair_check_error'] = $stmt_check_pair->errorInfo()[2];
+        $debug_info['group_check_error'] = $stmt_check_group->errorInfo()[2];
     }
 }
-unset($stmt_check_pair);
+unset($stmt_check_group);
 
+// If not in a group, check if in a pair (for backward compatibility)
+$pair_id = null;
+$partner_id = null;
+if ($group_id === null) {
+    $sql_check_pair = "SELECT user1_id, user2_id, id FROM pairs WHERE user1_id = :user_id OR user2_id = :user_id LIMIT 1";
+    if ($stmt_check_pair = $pdo->prepare($sql_check_pair)) {
+        $stmt_check_pair->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+        if ($stmt_check_pair->execute()) {
+            $pair = $stmt_check_pair->fetch(PDO::FETCH_ASSOC);
+            if ($pair) {
+                $pair_id = $pair['id'];
+                // Determine partner's ID
+                $partner_id = ($pair['user1_id'] == $user_id) ? $pair['user2_id'] : $pair['user1_id'];
+            }
+        } else {
+            $debug_info['pair_check_error'] = $stmt_check_pair->errorInfo()[2];
+        }
+    }
+    unset($stmt_check_pair);
+}
+
+$debug_info['group_id'] = $group_id;
+$debug_info['group_members'] = $group_members;
 $debug_info['pair_id'] = $pair_id;
 $debug_info['partner_id'] = $partner_id;
 
 error_log("DEBUG: get_random_photo - User ID: " . $user_id);
-error_log("DEBUG: get_random_photo - Pair ID before query: " . ($pair_id !== null ? $pair_id : "NULL"));
-error_log("DEBUG: get_random_photo - Partner ID before query: " . ($partner_id !== null ? $partner_id : "NULL"));
+error_log("DEBUG: get_random_photo - Group ID: " . ($group_id !== null ? $group_id : "NULL"));
+error_log("DEBUG: get_random_photo - Group Members: " . ($group_members ? implode(',', $group_members) : "None"));
+error_log("DEBUG: get_random_photo - Pair ID: " . ($pair_id !== null ? $pair_id : "NULL"));
+error_log("DEBUG: get_random_photo - Partner ID: " . ($partner_id !== null ? $partner_id : "NULL"));
 
-// Fetch a random photo filename from the database based on pairing status
+// Fetch a random photo filename from the database based on group/pairing status
 $photoData = null;
 // Select filename and event name
 $sql = "SELECT p.filename, e.name AS event_name
@@ -54,15 +93,24 @@ $sql = "SELECT p.filename, e.name AS event_name
         WHERE p.user_id = :user_id";
 $params = [':user_id' => $user_id];
 
-if ($pair_id !== null) {
-    // Include photos from the pair and the partner, linked to events belonging to the pair
+if ($group_id !== null) {
+    // Include photos from all group members, linked to events belonging to the group
+    $placeholders = implode(',', array_fill(0, count($group_members), '?'));
     $sql = "SELECT p.filename, e.name AS event_name
             FROM photos p
             LEFT JOIN events e ON p.event_id = e.id
-            WHERE (p.user_id = :user_id OR p.user_id = :partner_id OR (p.user_id IS NULL AND p.pair_id = :pair_id))
-            AND (e.pair_id = :pair_id OR p.event_id IS NULL)"; // Ensure event belongs to pair or photo is not linked to an event
-    $params[':partner_id'] = $partner_id;
-    $params[':pair_id'] = $pair_id;
+            WHERE (p.user_id IN ($placeholders) OR (p.user_id IS NULL AND p.group_id = ?))
+            AND (e.group_id = ? OR p.event_id IS NULL)"; // Ensure event belongs to group or photo is not linked to an event
+    
+    $params = array_merge($group_members, [$group_id, $group_id]);
+} elseif ($pair_id !== null) {
+    // For backward compatibility - include photos from the pair
+    $sql = "SELECT p.filename, e.name AS event_name
+            FROM photos p
+            LEFT JOIN events e ON p.event_id = e.id
+            WHERE (p.user_id = ? OR p.user_id = ? OR (p.user_id IS NULL AND p.pair_id = ?))
+            AND (e.pair_id = ? OR p.event_id IS NULL)"; // Ensure event belongs to pair or photo is not linked to an event
+    $params = [$user_id, $partner_id, $pair_id, $pair_id];
 }
 
 $sql .= " ORDER BY RAND() LIMIT 1";
@@ -75,6 +123,7 @@ if ($stmt = $pdo->prepare($sql)) {
         $photoData = $stmt->fetch(PDO::FETCH_ASSOC);
     } else {
         $debug_info['photo_fetch_error'] = $stmt->errorInfo()[2];
+        $debug_info['sql_error'] = $stmt->errorInfo();
     }
 }
 unset($stmt);

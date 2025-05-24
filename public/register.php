@@ -1,4 +1,5 @@
 <?php
+session_start();
 // Define a constant to prevent direct access to include files
 define('INCLUDE_CHECK', true);
 
@@ -173,3 +174,32 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 </body>
 </html>
+<script>
+    // Check for saved mode preference
+    const modeToggle = document.getElementById('mode-toggle');
+    const currentMode = '<?php echo $_SESSION["mode"] ?? "light"; ?>';
+    document.body.classList.toggle('dark', currentMode === 'dark');
+    modeToggle.checked = currentMode === 'dark';
+
+    modeToggle.addEventListener('change', () => {
+        const newMode = modeToggle.checked ? 'dark' : 'light';
+        fetch('./set_mode.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ mode: newMode })
+        }).then(() => {
+            document.body.classList.toggle('dark', newMode === 'dark');
+        });
+    });
+</script>
+<style>
+    body {
+        transition: background-color 0.3s, color 0.3s;
+    }
+    body.dark {
+        background-color: #1a1a1a; /* Dark background */
+        color: #f0f0f0; /* Light text */
+    }
+</style>

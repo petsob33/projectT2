@@ -1,4 +1,5 @@
 <?php
+session_start();
 // Define a constant to prevent direct access to include files
 define('INCLUDE_CHECK', true);
 
@@ -12,27 +13,60 @@ if (!is_logged_in()) {
     exit;
 }
 
-// Fetch the pair's start date
+// Get user information
 $user_id = $_SESSION['id'];
+$group_id = null;
+$group_name = null;
 $pair_id = null;
+$partner_username = "Partner"; // Default value
 $relationship_start_date = null;
 $error_message = "";
+$is_group = false;
 
-// Check if the user is part of a pair and get pair_id and start_date
-$sql_get_pair_info = "SELECT id, start_date FROM pairs WHERE user1_id = :user_id OR user2_id = :user_id LIMIT 1";
-if ($stmt_get_pair_info = $pdo->prepare($sql_get_pair_info)) {
-    $stmt_get_pair_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
-    if ($stmt_get_pair_info->execute()) {
-        $pair = $stmt_get_pair_info->fetch(PDO::FETCH_ASSOC);
-        if ($pair) {
-            $pair_id = $pair['id'];
-            $relationship_start_date = $pair['start_date'];
+// Check if the user is part of a group
+$sql_check_group = "SELECT g.id, g.name, g.start_date FROM groups g
+                    JOIN group_members gm ON g.id = gm.group_id
+                    WHERE gm.user_id = :user_id
+                    LIMIT 1";
+if ($stmt_check_group = $pdo->prepare($sql_check_group)) {
+    $stmt_check_group->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+    if ($stmt_check_group->execute()) {
+        $group = $stmt_check_group->fetch(PDO::FETCH_ASSOC);
+        if ($group) {
+            $group_id = $group['id'];
+            $group_name = htmlspecialchars($group['name']);
+            $relationship_start_date = $group['start_date'];
+            $is_group = true;
         }
     } else {
-        error_log("Error fetching pair info for admin dashboard: " . $stmt_get_pair_info->errorInfo()[2]);
+        error_log("Error checking group status for admin dashboard: " . $stmt_check_group->errorInfo()[2]);
     }
 }
-unset($stmt_get_pair_info);
+unset($stmt_check_group);
+
+// If not in a group, check if in a pair (for backward compatibility)
+if ($group_id === null) {
+    // Check if the user is part of a pair and get pair_id and start_date
+    $sql_get_pair_info = "SELECT p.id, p.start_date, u.username AS partner_username
+                          FROM pairs p
+                          JOIN users u ON (u.id = p.user1_id OR u.id = p.user2_id) AND u.id != :user_id
+                          WHERE p.user1_id = :user_id OR p.user2_id = :user_id
+                          LIMIT 1";
+    if ($stmt_get_pair_info = $pdo->prepare($sql_get_pair_info)) {
+        $stmt_get_pair_info->bindParam(":user_id", $user_id, PDO::PARAM_INT);
+        if ($stmt_get_pair_info->execute()) {
+            $pair = $stmt_get_pair_info->fetch(PDO::FETCH_ASSOC);
+            if ($pair) {
+                $pair_id = $pair['id'];
+                $relationship_start_date = $pair['start_date'];
+                $partner_username = htmlspecialchars($pair['partner_username']);
+            }
+        } else {
+            error_log("Error fetching pair info for admin dashboard: " . $stmt_get_pair_info->errorInfo()[2]);
+        }
+    }
+    unset($stmt_get_pair_info);
+}
 
 
 // Handle form submission for setting start date
@@ -41,7 +75,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['start_date'])) {
 
     // Validate date format (basic YYYY-MM-DD)
     if (preg_match("/^\d{4}-\d{2}-\d{2}$/", $submitted_date)) {
-        if ($pair_id !== null) {
+        if ($group_id !== null) {
+            // Update the start_date for the group
+            $sql_update_start_date = "UPDATE groups SET start_date = :start_date WHERE id = :group_id";
+            if ($stmt_update_start_date = $pdo->prepare($sql_update_start_date)) {
+                $stmt_update_start_date->bindParam(":start_date", $submitted_date, PDO::PARAM_STR);
+                $stmt_update_start_date->bindParam(":group_id", $group_id, PDO::PARAM_INT);
+                if ($stmt_update_start_date->execute()) {
+                    // Redirect to prevent form resubmission and show updated duration
+                    header("location: ./dashboard.php");
+                    exit();
+                } else {
+                    $error_message = "Chyba při ukládání data začátku skupiny.";
+                    error_log("Error updating start_date in admin dashboard: " . $stmt_update_start_date->errorInfo()[2]);
+                }
+                unset($stmt_update_start_date);
+            } else {
+                $error_message = "Interní chyba serveru při přípravě aktualizace data.";
+                error_log("Error preparing update start_date statement in admin dashboard: " . $pdo->errorInfo()[2]);
+            }
+        } else if ($pair_id !== null) {
             // Update the start_date for the pair
             $sql_update_start_date = "UPDATE pairs SET start_date = :start_date WHERE id = :pair_id";
             if ($stmt_update_start_date = $pdo->prepare($sql_update_start_date)) {
@@ -57,11 +110,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['start_date'])) {
                 }
                 unset($stmt_update_start_date);
             } else {
-                 $error_message = "Interní chyba serveru při přípravě aktualizace data.";
-                 error_log("Error preparing update start_date statement in admin dashboard: " . $pdo->errorInfo()[2]);
+                $error_message = "Interní chyba serveru při přípravě aktualizace data.";
+                error_log("Error preparing update start_date statement in admin dashboard: " . $pdo->errorInfo()[2]);
             }
         } else {
-            $error_message = "Nejste součástí žádného páru. Nelze nastavit datum začátku vztahu.";
+            $error_message = "Nejste součástí žádné skupiny ani páru. Nelze nastavit datum začátku.";
         }
     } else {
         $error_message = "Neplatný formát data. Použijte prosím formát RRRR-MM-DD.";
@@ -72,8 +125,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['start_date'])) {
 // Fetch events and their associated photos ordered by event date
 $events = [];
 
-// Fetch events and their associated photos if paired
-if ($pair_id !== null) {
+// Fetch events and their associated photos
+if ($group_id !== null) {
+    // If user is in a group, fetch events linked to that group
+    $sql = "SELECT
+                e.id AS event_id,
+                e.name AS event_name,
+                e.date AS event_date,
+                p.id AS photo_id,
+                p.filename,
+                p.description
+            FROM events e
+            JOIN photos p ON e.id = p.event_id
+            WHERE e.group_id = :group_id
+            ORDER BY e.date DESC, p.id ASC"; // Order by event date descending, then photo ID ascending
+
+    $params = [':group_id' => $group_id];
+} elseif ($pair_id !== null) {
+    // For backward compatibility - if user is in a pair, fetch events linked to that pair
     $sql = "SELECT
                 e.id AS event_id,
                 e.name AS event_name,
@@ -87,6 +156,10 @@ if ($pair_id !== null) {
             ORDER BY e.date DESC, p.id ASC"; // Order by event date descending, then photo ID ascending
 
     $params = [':pair_id' => $pair_id];
+} else {
+    $sql = ""; // No query if not in a group or pair
+    $params = [];
+}
 
     if ($stmt = $pdo->prepare($sql)) {
         if ($stmt->execute($params)) {
@@ -115,7 +188,6 @@ if ($pair_id !== null) {
         }
     }
     unset($stmt);
-}
 
 // Close connection (if it was opened by db.php, though it's better to manage connection scope)
 // unset($pdo); // Keep connection open if needed by auth.php or other includes
@@ -165,6 +237,40 @@ if ($pair_id !== null) {
     <header class="bg-pastel-pink p-4 flex justify-between items-center shadow-md">
         <div class="text-3xl font-bold text-pastel-purple">Admin Dashboard</div>
         <div class="hamburger-menu-icon text-pastel-purple text-3xl cursor-pointer">&#9776;</div>
+<!-- Light/Dark Mode Toggle -->
+<div class="flex items-center mb-4">
+    <label for="mode-toggle" class="mr-2 text-pastel-purple">Light/Dark Mode:</label>
+    <input type="checkbox" id="mode-toggle" class="toggle-checkbox" />
+</div>
+<script>
+    // Check for saved mode preference
+    const modeToggle = document.getElementById('mode-toggle');
+    const currentMode = '<?php echo $_SESSION["mode"] ?? "light"; ?>';
+    document.body.classList.toggle('dark', currentMode === 'dark');
+    modeToggle.checked = currentMode === 'dark';
+
+    modeToggle.addEventListener('change', () => {
+        const newMode = modeToggle.checked ? 'dark' : 'light';
+        fetch('../set_mode.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ mode: newMode })
+        }).then(() => {
+            document.body.classList.toggle('dark', newMode === 'dark');
+        });
+    });
+</script>
+<style>
+    body {
+        transition: background-color 0.3s, color 0.3s;
+    }
+    body.dark {
+        background-color: #1a1a1a; /* Dark background */
+        color: #f0f0f0; /* Light text */
+    }
+</style>
     </header>
 
     <!-- Sidebar Menu -->
@@ -174,7 +280,8 @@ if ($pair_id !== null) {
             <li class="mb-2"><a href="../public/index.php" class="text-gray-700 hover:text-pastel-purple">Hlavní stránka</a></li>
             <li class="mb-2"><a href="../app/memories.php" class="text-gray-700 hover:text-pastel-purple">Naše vzpomínky</a></li>
             <li class="mb-2"><a href="../app/pair_requests.php" class="text-gray-700 hover:text-pastel-purple">Žádosti o párování</a></li>
-             <li class="mb-2"><a href="../public/relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
+            <li class="mb-2"><a href="../app/group_invitations.php" class="text-gray-700 hover:text-pastel-purple">Skupiny a pozvánky</a></li>
+            <li class="mb-2"><a href="../public/relationship_duration.php" class="text-gray-700 hover:text-pastel-purple">Délka vztahu</a></li>
             <li class="mb-2"><a href="./dashboard.php" class="text-gray-700 hover:text-pastel-purple">Admin</a></li>
             <?php if (is_logged_in()): ?>
                 <li class="mb-2"><a href="../public/logout.php" class="text-gray-700 hover:text-pastel-purple">Odhlásit se</a></li>
@@ -192,7 +299,9 @@ if ($pair_id !== null) {
 
             <!-- Relationship Start Date Form -->
             <div class="mb-8 pb-8 border-b border-gray-200">
-                <h2 class="text-3xl font-bold text-pastel-purple mb-4">Datum začátku vztahu</h2>
+                <h2 class="text-3xl font-bold text-pastel-purple mb-4">
+                    <?php echo $is_group ? "Datum založení skupiny" : "Datum začátku vztahu"; ?>
+                </h2>
                  <?php if (!empty($error_message)): ?>
                      <div class="text-red-500 text-sm mb-4"><?php echo $error_message; ?></div>
                  <?php endif; ?>
